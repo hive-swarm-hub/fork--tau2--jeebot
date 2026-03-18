@@ -52,54 +52,26 @@ You are a customer service agent. You MUST follow the <policy> exactly. The poli
 """.strip()
 
 AIRLINE_INSTRUCTIONS = """
-## Cancellation rules
-- If ANY portion of a flight has already been flown → you CANNOT help, transfer to human immediately.
-- Otherwise cancellation is allowed ONLY if at least one condition is met per reservation:
-  (a) Booked within last 24 hours (compare created_at to current time 2024-05-15 15:00 EST)
-  (b) Airline cancelled the flight
-  (c) Business class reservation — business class IS always cancellable
-  (d) Travel insurance with covered reason (health/weather only)
-  If NONE apply, REFUSE the cancellation. Membership level does NOT grant cancellation rights.
-- You MUST ask the user for their cancellation reason.
-
-## Modification rules
-- If ANY flight in the reservation has already been flown → transfer to human immediately (same as cancellation).
-- Basic economy flights CANNOT have their flights changed. To change flights on basic economy: FIRST upgrade the cabin class (e.g. to economy), THEN change flights in a separate update call.
-- Origin, destination, and trip type CANNOT be changed.
-- Cabin class CAN be changed on any reservation (including basic economy) as long as no flight has been flown.
-- Cabin class must be the same across all flights in a reservation.
-- If flight change results in price difference, user must provide a single gift card or credit card for payment/refund. The payment method must be in their profile.
-- "Modify passengers" (changing name/DOB) IS allowed. "Modify passenger count" is NOT — even a human agent cannot do this.
-- Cannot add insurance after initial booking. Can add but not remove checked bags.
-
-## Compensation rules — FOLLOW EXACTLY
-- Do NOT proactively offer compensation. Only address if the user explicitly asks.
-- DENY compensation if the user is a regular member AND has no travel insurance AND flies basic economy or economy.
-- ONLY compensate if: user is silver/gold member OR has travel insurance OR flies business.
-- Cancelled flight complaint: offer certificate of $100 × number of passengers (after confirming facts).
-- Delayed flight complaint where user wants to change/cancel: offer certificate of $50 × number of passengers (after confirming facts AND completing the change/cancellation).
-- NO compensation for any other reason.
-
-## Booking rules
-- Max 5 passengers per reservation. All fly same flights, same cabin.
-- Payment: max 1 certificate + max 1 credit card + max 3 gift cards. All must be in user profile.
-- Certificate remainder is not refundable.
-- Free checked bags per passenger by membership: regular(0/1/2), silver(1/2/3), gold(2/3/4) for basic_economy/economy/business. Extra bags $50 each. Do NOT add bags the user doesn't need.
-- For round trips: search outbound AND return flights separately.
-- Use the calculate tool for all price/savings computations. Always communicate totals to the user.
+- For cancellations: check EACH reservation INDIVIDUALLY. Verify at least one condition is met:
+  (a) Booked within last 24 hours (compare created_at to 2024-05-15 15:00 EST)
+  (b) Airline cancelled the flight (c) Business class — business class IS always cancellable
+  (d) Travel insurance with covered reason (health/weather).
+  If NONE apply to a specific reservation, REFUSE that cancellation. Membership does NOT grant cancellation rights.
+- Basic economy flights CANNOT have their flights changed. To change flights on a basic economy reservation: FIRST upgrade the cabin class (e.g., to economy), THEN change flights in a second update call.
+- "Modify passengers" (changing name/DOB) IS allowed. "Modify passenger count" is NOT.
+- Free checked bags per passenger: regular(0/1/2), silver(1/2/3), gold(2/3/4) for basic_economy/economy/business. Extra bags cost $50 each. Do not charge for free bags.
+- For round trips: search outbound AND return flights separately. Do not reuse the same flight for both directions.
+- Use the calculate tool for all price/savings computations. Always communicate total costs/savings to the user.
 """.strip()
 
 RETAIL_INSTRUCTIONS = """
-- Authenticate the user by email or name+zip code first, even if they provide a user ID directly.
-- Check order status BEFORE choosing an action: pending orders use modify_pending_order_* tools, delivered orders use exchange_delivered_order_items or return_delivered_order_items.
-- modify_pending_order_items and exchange_delivered_order_items can only be called ONCE per order. After calling, the order cannot be further modified/cancelled. Collect ALL items to change into a single call. Remind the user to confirm all items before proceeding.
-- Items in modify/exchange must be the same product TYPE (e.g. shirt→shirt, NOT shirt→shoe). Different options (color, size) are fine.
-- If a user wants both a return AND exchange on the same delivered order, only one operation is possible. Ask which they prefer.
-- For cancellation: reason must be exactly "no longer needed" or "ordered by mistake". No other reasons are accepted.
+- Authenticate the user by email or name+zip code first, even if they provide a user ID.
+- Check order status BEFORE choosing an action: use modify_pending_order_items for pending orders, exchange_delivered_order_items for delivered orders.
+- modify_pending_order_items and exchange_delivered_order_items can only be called ONCE per order. Collect ALL items to change into a single call. Remind the user to confirm all items before proceeding.
+- If a user wants both a return AND exchange on the same order, only one is possible. Ask which they prefer.
 - If the user doesn't know their order ID, use get_user_details to look up their orders.
 - After any exchange or item modification, compute and tell the user the price difference.
-- If paying with gift card for exchange/modify, verify it has sufficient balance for the price difference.
-- When the user asks about an address, look up ALL their orders to find the right one.
+- When the user asks about an address, look up ALL their orders to find the right one. If you can't find the address in any order, ask the user to provide it directly.
 """.strip()
 
 TELECOM_INSTRUCTIONS = """
@@ -110,9 +82,6 @@ TELECOM_INSTRUCTIONS = """
 - Data usage: check on the CORRECT line. If data_used_gb exceeds data_limit_gb, offer data refueling (max 2GB) or plan change.
 - For MMS issues, check ALL of these systematically: cellular service → mobile data → network mode (must be 3G+) → Wi-Fi calling (turn OFF) → app permissions (messaging app needs 'sms' AND 'storage') → APN/MMSC settings. Do NOT transfer until you've checked every step.
 - For slow data: check data saver (turn OFF), network mode preference (upgrade from 2G/3G to 4G/5G), and VPN (disconnect if active).
-- For no service: check status bar → airplane mode → SIM status → reset APN + reboot → check line suspension.
-- After resuming a suspended line, user must reboot device to restore service.
-- Overdue bill workflow: verify bill is overdue → send_payment_request → user reviews → make_payment → verify paid.
 """.strip()
 
 SYSTEM_TEMPLATE = """
@@ -228,6 +197,38 @@ def annotate_telecom(content: str) -> str:
                 "You CANNOT resume this line — call transfer_to_human_agents tool."
             )
 
+    # Speed test results annotation
+    if '"download_speed"' in content:
+        if '"no connection"' in content.lower() or '"unknown"' in content.lower():
+            annotations.append(
+                "SPEED TEST: No connection detected. Follow unavailable mobile data troubleshooting path."
+            )
+        elif any(s in content.lower() for s in ['"very poor"', '"poor"', '"fair"', '"good"']):
+            annotations.append(
+                "SPEED TEST: Connection available but not excellent. Check data saver, network mode preference, and VPN."
+            )
+
+    # Wi-Fi calling annotation for MMS
+    if '"wifi_calling"' in content and '"enabled": true' in content.lower():
+        annotations.append(
+            "NOTE: Wi-Fi calling is ON. If troubleshooting MMS issues, turn Wi-Fi calling OFF first."
+        )
+
+    # Overdue bill annotation
+    if '"status": "overdue"' in content.lower() or '"status":"overdue"' in content.lower():
+        annotations.append(
+            "BILL IS OVERDUE. To process payment: (1) call send_payment_request, "
+            "(2) then call make_payment after user confirms."
+        )
+
+    # Line suspension with overdue bills
+    if '"status": "Suspended"' in content and '"suspension_reason"' in content:
+        if '"overdue_bill"' in content or '"overdue"' in content.lower():
+            annotations.append(
+                "Line suspended due to overdue bill. Pay all overdue bills first, "
+                "then resume the line. After resuming, user must reboot device."
+            )
+
     if annotations:
         return content + "\n\n--- AGENT NOTES ---\n" + "\n".join(annotations)
     return content
@@ -243,7 +244,7 @@ def annotate_airline(content: str) -> str:
     if '"cabin": "basic_economy"' in content or '"cabin":"basic_economy"' in content:
         annotations.append(
             "NOTE: This is a BASIC ECONOMY reservation. "
-            "Flights CANNOT be changed directly. To change flights: first upgrade cabin class, then change flights."
+            "Flights CANNOT be changed. Cabin class CAN be changed."
         )
 
     if '"cabin": "business"' in content and '"reservation_id"' in content:
@@ -268,11 +269,22 @@ def annotate_airline(content: str) -> str:
                         "airline cancelled the flight."
                     )
 
-    # Check for already-flown flights
+    # Compensation eligibility annotation based on membership + cabin + insurance
+    if '"membership"' in content and '"reservation_id"' in content:
+        is_regular = '"membership": "regular"' in content
+        has_insurance = '"travel_insurance": "yes"' in content
+        is_business = '"cabin": "business"' in content
+        is_economy = '"cabin": "economy"' in content or '"cabin": "basic_economy"' in content
+        if is_regular and not has_insurance and is_economy:
+            annotations.append(
+                "COMPENSATION: This user is regular member with economy and no insurance. "
+                "Do NOT offer compensation per policy."
+            )
+
+    # Detect already-flown flights
     if '"status": "flying"' in content or '"status": "landed"' in content:
         annotations.append(
-            "WARNING: This flight has already been flown or is in-flight. "
-            "Cannot modify or cancel — transfer to human agent."
+            "WARNING: Flight already flown/in-flight. Cannot modify or cancel — transfer to human."
         )
 
     if annotations:
@@ -287,25 +299,25 @@ def annotate_retail(content: str) -> str:
 
     annotations = []
 
-    if '"status": "pending"' in content and '"order_id"' in content:
-        annotations.append(
-            "NOTE: This order is PENDING. Use modify_pending_order_* tools "
-            "(NOT exchange/return). Remember: modify_pending_order_items can only be called ONCE."
-        )
-    elif '"status": "delivered"' in content and '"order_id"' in content:
-        annotations.append(
-            "NOTE: This order is DELIVERED. Use exchange_delivered_order_items "
-            "or return_delivered_order_items (NOT modify_pending_order_*). "
-            "exchange_delivered_order_items can only be called ONCE."
-        )
-    elif '"status": "cancelled"' in content and '"order_id"' in content:
-        annotations.append(
-            "NOTE: This order is CANCELLED. No actions can be taken on cancelled orders."
-        )
-    elif '"status": "processed"' in content and '"order_id"' in content:
-        annotations.append(
-            "NOTE: This order is PROCESSED. No modifications allowed."
-        )
+    if '"order_id"' in content:
+        if '"status": "pending"' in content:
+            annotations.append(
+                "NOTE: This order is PENDING. Use modify_pending_order_* tools "
+                "(NOT exchange/return). modify_pending_order_items can only be called ONCE."
+            )
+        elif '"status": "delivered"' in content:
+            annotations.append(
+                "NOTE: This order is DELIVERED. Use exchange_delivered_order_items "
+                "or return_delivered_order_items. exchange can only be called ONCE."
+            )
+        elif '"status": "cancelled"' in content:
+            annotations.append(
+                "NOTE: This order is CANCELLED. No actions can be taken."
+            )
+        elif "pending (items modified)" in content:
+            annotations.append(
+                "NOTE: Items on this order were already modified. No further modifications or cancellations allowed."
+            )
 
     if annotations:
         return content + "\n\n--- AGENT NOTES ---\n" + "\n".join(annotations)
@@ -385,7 +397,7 @@ class CustomAgent(LLMAgent):
 
         # 3. Determine tool_choice — break infinite loops in telecom by forcing
         #    text after too many consecutive tool calls without user interaction
-        if api_tools and self.domain == "telecom" and self._consecutive_tool_calls >= 3:
+        if api_tools and self.domain == "telecom" and self._consecutive_tool_calls >= 5:
             tool_choice = "none"  # Force text response to break loop
         elif api_tools:
             tool_choice = "auto"
