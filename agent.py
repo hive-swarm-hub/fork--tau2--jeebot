@@ -197,38 +197,6 @@ def annotate_telecom(content: str) -> str:
                 "You CANNOT resume this line — call transfer_to_human_agents tool."
             )
 
-    # Speed test results annotation
-    if '"download_speed"' in content:
-        if '"no connection"' in content.lower() or '"unknown"' in content.lower():
-            annotations.append(
-                "SPEED TEST: No connection detected. Follow unavailable mobile data troubleshooting path."
-            )
-        elif any(s in content.lower() for s in ['"very poor"', '"poor"', '"fair"', '"good"']):
-            annotations.append(
-                "SPEED TEST: Connection available but not excellent. Check data saver, network mode preference, and VPN."
-            )
-
-    # Wi-Fi calling annotation for MMS
-    if '"wifi_calling"' in content and '"enabled": true' in content.lower():
-        annotations.append(
-            "NOTE: Wi-Fi calling is ON. If troubleshooting MMS issues, turn Wi-Fi calling OFF first."
-        )
-
-    # Overdue bill annotation
-    if '"status": "overdue"' in content.lower() or '"status":"overdue"' in content.lower():
-        annotations.append(
-            "BILL IS OVERDUE. To process payment: (1) call send_payment_request, "
-            "(2) then call make_payment after user confirms."
-        )
-
-    # Line suspension with overdue bills
-    if '"status": "Suspended"' in content and '"suspension_reason"' in content:
-        if '"overdue_bill"' in content or '"overdue"' in content.lower():
-            annotations.append(
-                "Line suspended due to overdue bill. Pay all overdue bills first, "
-                "then resume the line. After resuming, user must reboot device."
-            )
-
     if annotations:
         return content + "\n\n--- AGENT NOTES ---\n" + "\n".join(annotations)
     return content
@@ -269,24 +237,6 @@ def annotate_airline(content: str) -> str:
                         "airline cancelled the flight."
                     )
 
-    # Compensation eligibility annotation based on membership + cabin + insurance
-    if '"membership"' in content and '"reservation_id"' in content:
-        is_regular = '"membership": "regular"' in content
-        has_insurance = '"travel_insurance": "yes"' in content
-        is_business = '"cabin": "business"' in content
-        is_economy = '"cabin": "economy"' in content or '"cabin": "basic_economy"' in content
-        if is_regular and not has_insurance and is_economy:
-            annotations.append(
-                "COMPENSATION: This user is regular member with economy and no insurance. "
-                "Do NOT offer compensation per policy."
-            )
-
-    # Detect already-flown flights
-    if '"status": "flying"' in content or '"status": "landed"' in content:
-        annotations.append(
-            "WARNING: Flight already flown/in-flight. Cannot modify or cancel — transfer to human."
-        )
-
     if annotations:
         return content + "\n\n--- AGENT NOTES ---\n" + "\n".join(annotations)
     return content
@@ -299,25 +249,16 @@ def annotate_retail(content: str) -> str:
 
     annotations = []
 
-    if '"order_id"' in content:
-        if '"status": "pending"' in content:
-            annotations.append(
-                "NOTE: This order is PENDING. Use modify_pending_order_* tools "
-                "(NOT exchange/return). modify_pending_order_items can only be called ONCE."
-            )
-        elif '"status": "delivered"' in content:
-            annotations.append(
-                "NOTE: This order is DELIVERED. Use exchange_delivered_order_items "
-                "or return_delivered_order_items. exchange can only be called ONCE."
-            )
-        elif '"status": "cancelled"' in content:
-            annotations.append(
-                "NOTE: This order is CANCELLED. No actions can be taken."
-            )
-        elif "pending (items modified)" in content:
-            annotations.append(
-                "NOTE: Items on this order were already modified. No further modifications or cancellations allowed."
-            )
+    if '"status": "pending"' in content and '"order_id"' in content:
+        annotations.append(
+            "NOTE: This order is PENDING. Use modify_pending_order_* tools "
+            "(NOT exchange/return)."
+        )
+    elif '"status": "delivered"' in content and '"order_id"' in content:
+        annotations.append(
+            "NOTE: This order is DELIVERED. Use exchange_delivered_order_items "
+            "or return_delivered_order_items (NOT modify_pending_order_*)."
+        )
 
     if annotations:
         return content + "\n\n--- AGENT NOTES ---\n" + "\n".join(annotations)
@@ -397,7 +338,7 @@ class CustomAgent(LLMAgent):
 
         # 3. Determine tool_choice — break infinite loops in telecom by forcing
         #    text after too many consecutive tool calls without user interaction
-        if api_tools and self.domain == "telecom" and self._consecutive_tool_calls >= 5:
+        if api_tools and self.domain == "telecom" and self._consecutive_tool_calls >= 3:
             tool_choice = "none"  # Force text response to break loop
         elif api_tools:
             tool_choice = "auto"
