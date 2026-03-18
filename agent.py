@@ -57,6 +57,7 @@ AIRLINE_INSTRUCTIONS = """
   (b) Airline cancelled the flight (c) Business class — business class IS always cancellable
   (d) Travel insurance with covered reason (health/weather).
   If NONE apply to a specific reservation, REFUSE that cancellation. Membership does NOT grant cancellation rights.
+- Flight changes: origin, destination, and trip type CANNOT be changed. If user asks to fly to a different airport (e.g., LGA→JFK), REFUSE — that is a destination change.
 - Basic economy flights CANNOT have their flights changed. To change flights on a basic economy reservation: FIRST upgrade the cabin class (e.g., to economy), THEN change flights in a second update call.
 - "Modify passengers" (changing name/DOB) IS allowed. "Modify passenger count" is NOT.
 - Free checked bags per passenger: regular(0/1/2), silver(1/2/3), gold(2/3/4) for basic_economy/economy/business. Extra bags cost $50 each. Do not charge for free bags.
@@ -336,8 +337,14 @@ class CustomAgent(LLMAgent):
         )
         api_tools = [t.openai_schema for t in self.tools] if self.tools else None
 
-        # 3. Determine tool_choice
-        tool_choice = "auto" if api_tools else None
+        # 3. Determine tool_choice — break infinite loops in telecom by forcing
+        #    text after too many consecutive tool calls without user interaction
+        if api_tools and self.domain == "telecom" and self._consecutive_tool_calls >= 10:
+            tool_choice = "none"  # Force text response to break loop
+        elif api_tools:
+            tool_choice = "auto"
+        else:
+            tool_choice = None
 
         # 4. Call LLM with retry logic
         for attempt in range(MAX_RETRIES):
