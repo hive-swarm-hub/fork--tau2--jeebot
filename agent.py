@@ -298,9 +298,6 @@ class CustomAgent(LLMAgent):
         self.llm_args = dict(llm_args or {})
         self.domain = detect_domain(domain_policy)
         self._consecutive_tool_calls = 0
-        # Use gpt-4.1 for airline (complex reasoning), keep gpt-4.1-mini for others
-        if self.domain == "airline":
-            self.llm = "gpt-4.1"
 
     @property
     def system_prompt(self) -> str:
