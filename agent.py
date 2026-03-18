@@ -82,6 +82,7 @@ TELECOM_INSTRUCTIONS = """
 - Data usage: check on the CORRECT line. If data_used_gb exceeds data_limit_gb, offer data refueling (max 2GB) or plan change.
 - For MMS issues, check ALL of these systematically: cellular service → mobile data → network mode (must be 3G+) → Wi-Fi calling (turn OFF) → app permissions (messaging app needs 'sms' AND 'storage') → APN/MMSC settings. Do NOT transfer until you've checked every step.
 - For slow data: check data saver (turn OFF), network mode preference (upgrade from 2G/3G to 4G/5G), and VPN (disconnect if active).
+- Be action-oriented: execute ALL required diagnostic and fix steps. Do not stop early or transfer prematurely.
 """.strip()
 
 SYSTEM_TEMPLATE = """
