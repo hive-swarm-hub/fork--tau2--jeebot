@@ -57,7 +57,6 @@ AIRLINE_INSTRUCTIONS = """
   (b) Airline cancelled the flight (c) Business class — business class IS always cancellable
   (d) Travel insurance with covered reason (health/weather).
   If NONE apply to a specific reservation, REFUSE that cancellation. Membership does NOT grant cancellation rights.
-- Flight changes: origin, destination, and trip type CANNOT be changed. If user asks to fly to a different airport (e.g., LGA→JFK), REFUSE — that is a destination change.
 - Basic economy flights CANNOT have their flights changed. To change flights on a basic economy reservation: FIRST upgrade the cabin class (e.g., to economy), THEN change flights in a second update call.
 - "Modify passengers" (changing name/DOB) IS allowed. "Modify passenger count" is NOT.
 - Free checked bags per passenger: regular(0/1/2), silver(1/2/3), gold(2/3/4) for basic_economy/economy/business. Extra bags cost $50 each. Do not charge for free bags.
