@@ -336,14 +336,8 @@ class CustomAgent(LLMAgent):
         )
         api_tools = [t.openai_schema for t in self.tools] if self.tools else None
 
-        # 3. Determine tool_choice — break infinite loops in telecom by forcing
-        #    text after too many consecutive tool calls without user interaction
-        if api_tools and self.domain == "telecom" and self._consecutive_tool_calls >= 10:
-            tool_choice = "none"  # Force text response to break loop
-        elif api_tools:
-            tool_choice = "auto"
-        else:
-            tool_choice = None
+        # 3. Determine tool_choice
+        tool_choice = "auto" if api_tools else None
 
         # 4. Call LLM with retry logic
         for attempt in range(MAX_RETRIES):
