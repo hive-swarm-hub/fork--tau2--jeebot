@@ -4,3 +4,7 @@ run.log
 results.tsv
 __pycache__/
 *.pyc
+.claude/
+CLAUDE.md
+results.tsv
+run.log
