@@ -268,6 +268,7 @@ def annotate_retail(content: str) -> str:
 ANNOTATORS = {
     "telecom": annotate_telecom,
     "airline": annotate_airline,
+    "retail": annotate_retail,
 }
 
 
